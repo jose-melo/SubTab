@@ -145,7 +145,9 @@ class SubTab:
         # Convert loss dictionary to a dataframe
         loss_df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in self.loss.items()]))
         # Save loss dataframe as csv file for later use
-        loss_df.to_csv(self._loss_path + "/losses.csv")
+        loss_df.to_csv(
+            self._loss_path + "/losses" + str(datetime.now().strftime("%Y-%m-%d-%H-%M-%S")) + ".csv"
+        )
 
     def validate(self, validation_loader):
         """Computes validation loss.
@@ -466,8 +468,12 @@ class SubTab:
 
     def load_models(self):
         """Used to load weights saved at the end of the training."""
+        import glob
+
         for model_name in self.model_dict:
-            model = th.load(self._model_path + "/" + model_name + ".pt", map_location=self.device)
+            filepath = glob.glob(self._model_path + "/" + model_name + "*.pt")
+            filepath = filepath[-1]
+            model = th.load(filepath, map_location=self.device)
             setattr(self, model_name, model.eval())
             print(f"--{model_name} is loaded")
         print("Done with loading models.")
