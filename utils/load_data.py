@@ -132,6 +132,7 @@ class TabularDataset(Dataset):
             "helena",
             "higgs",
             "jannis",
+            "california",
         ]:
             args = {"data_path": "./data"}
             args = Namespace(**args)

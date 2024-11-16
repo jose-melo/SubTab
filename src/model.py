@@ -5,6 +5,7 @@ email: ucabtuc@gmail.com
 Description: SubTab class, the framework used for self-supervised representation learning.
 """
 
+from datetime import datetime
 import gc
 import itertools
 import os
@@ -453,7 +454,14 @@ class SubTab:
     def save_weights(self):
         """Used to save weights."""
         for model_name in self.model_dict:
-            th.save(self.model_dict[model_name], self._model_path + "/" + model_name + ".pt")
+            th.save(
+                self.model_dict[model_name],
+                self._model_path
+                + "/"
+                + model_name
+                + str(datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+                + ".pt",
+            )
         print("Done with saving models.")
 
     def load_models(self):
