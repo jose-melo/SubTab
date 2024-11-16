@@ -6,6 +6,7 @@ Description: Wrapper function for training routine.
 """
 
 import copy
+from datetime import datetime
 import time
 
 import mlflow
@@ -16,6 +17,10 @@ from src.model import SubTab
 from utils.arguments import get_arguments, get_config, print_config_summary
 from utils.load_data import Loader
 from utils.utils import set_dirs, run_with_profiler, update_config_with_model_dims
+
+import argparse
+import wandb
+import tabulate
 
 
 def train(config, data_loader, save_weights=True):
@@ -40,7 +45,7 @@ def train(config, data_loader, save_weights=True):
     _ = model.save_weights() if save_weights else None
 
     # Save the config file to keep a record of the settings
-    with open(model._results_path + "/config.yml", 'w') as config_file:
+    with open(model._results_path + "/config.yml", "w") as config_file:
         yaml.dump(config, config_file, default_flow_style=False)
     print("Done with training...")
 
@@ -49,7 +54,9 @@ def train(config, data_loader, save_weights=True):
         # Log config with mlflow
         mlflow.log_artifacts("./config", "config")
         # Log model and results with mlflow
-        mlflow.log_artifacts(model._results_path + "/training/" + config["model_mode"] + "/plots", "training_results")
+        mlflow.log_artifacts(
+            model._results_path + "/training/" + config["model_mode"] + "/plots", "training_results"
+        )
         # log model
         # mlflow.pytorch.log_model(model, "models")
 
@@ -72,18 +79,35 @@ def main(config):
 
 
 if __name__ == "__main__":
+
     # Get parser / command line arguments
     args = get_arguments()
     # Get configuration file
     config = get_config(args)
+
+    parser = argparse.ArgumentParser(description="Train a model")
+
+    if args.n_dims == 2:
+        dims = [args.hidden_dim_0, args.hidden_dim_1]
+    elif args.n_dims == 3:
+        dims = [args.hidden_dim_0, args.hidden_dim_1, args.hidden_dim_2]
+
+    config["dims"] = dims
+    config["dropout_rate"] = args.dropout_rate
+    config["learning_rate"] = args.learning_rate
+    config["n_subsets"] = args.n_subsets
+    config["aggregation"] = args.aggregation
+    config["noise_type"] = args.noise_type
+
     # Overwrite the parent folder name for saving results
     config["framework"] = config["dataset"]
     # Get a copy of autoencoder dimensions
     dims = copy.deepcopy(config["dims"])
     # Summarize config and arguments on the screen as a sanity check
     print_config_summary(config, args)
-    
-    #----- If True, start of MLFlow for experiment tracking:
+    wandb.init(project="subtab", name=f"{args.dataset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+
+    # ----- If True, start of MLFlow for experiment tracking:
     if config["mlflow"]:
         # Experiment name
         experiment_name = "Give_Your_Experiment_A_Name"
@@ -94,10 +118,10 @@ if __name__ == "__main__":
             # Run the main with or without profiler
             run_with_profiler(main, config) if config["profile"] else main(config)
     else:
-        #----- Run Training - with or without profiler
+        # ----- Run Training - with or without profiler
         run_with_profiler(main, config) if config["profile"] else main(config)
-    
-        #----- Moving to evaluation stage
+
+        # ----- Moving to evaluation stage
         # Reset the autoencoder dimension since it was changed in train.py
         config["dims"] = dims
         # Disable adding noise since we are in evaluation mode

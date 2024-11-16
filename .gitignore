@@ -35,3 +35,4 @@ config/*
 !config/runtime.yaml
 !config/mnist.yaml
 
+wandb/

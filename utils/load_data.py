@@ -5,8 +5,10 @@ email: ucabtuc@gmail.com
 Description: A library for data loaders.
 """
 
+from argparse import Namespace
 import os
 
+from src.datasets.dict_to_data import DATASET_NAME_TO_DATASET_MAP
 import datatable as dt
 import numpy as np
 import pandas as pd
@@ -18,7 +20,7 @@ from torch.utils.data import Dataset
 
 
 class Loader(object):
-    """ Data loader """
+    """Data loader"""
 
     def __init__(self, config, dataset_name, drop_last=True, kwargs={}):
         """Pytorch data loader
@@ -41,40 +43,56 @@ class Loader(object):
         # Get the datasets
         train_dataset, test_dataset, validation_dataset = self.get_dataset(dataset_name, file_path)
         # Set the loader for training set
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_last, **kwargs)
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_last, **kwargs
+        )
         # Set the loader for test set
-        self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs)
+        self.test_loader = DataLoader(
+            test_dataset, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs
+        )
         # Set the loader for validation set
-        self.validation_loader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False, drop_last=drop_last, **kwargs)
-        
+        self.validation_loader = DataLoader(
+            validation_dataset, batch_size=batch_size, shuffle=False, drop_last=drop_last, **kwargs
+        )
 
     def get_dataset(self, dataset_name, file_path):
         """Returns training, validation, and test datasets"""
         # Create dictionary for loading functions of datasets.
         # If you add a new dataset, add its corresponding dataset class here in the form 'dataset_name': ClassName
-        loader_map = {'default_loader': TabularDataset}
-        # Get dataset. Check if the dataset has a custom class. 
+        loader_map = {"default_loader": TabularDataset}
+        # Get dataset. Check if the dataset has a custom class.
         # If not, then assume a tabular data with labels in the first column
-        dataset = loader_map[dataset_name] if dataset_name in loader_map.keys() else loader_map['default_loader']
+        dataset = (
+            loader_map[dataset_name]
+            if dataset_name in loader_map.keys()
+            else loader_map["default_loader"]
+        )
         # Training and Validation datasets
-        train_dataset = dataset(self.config, datadir=file_path, dataset_name=dataset_name, mode='train')
+        train_dataset = dataset(
+            self.config, datadir=file_path, dataset_name=dataset_name, mode="train"
+        )
         # Test dataset
-        test_dataset = dataset(self.config, datadir=file_path, dataset_name=dataset_name, mode='test')
+        test_dataset = dataset(
+            self.config, datadir=file_path, dataset_name=dataset_name, mode="test"
+        )
         # validation dataset
-        validation_dataset = dataset(self.config, datadir=file_path, dataset_name=dataset_name, mode="validation")
+        validation_dataset = dataset(
+            self.config, datadir=file_path, dataset_name=dataset_name, mode="validation"
+        )
         # Return
         return train_dataset, test_dataset, validation_dataset
 
 
 class ToTensorNormalize(object):
     """Convert ndarrays to Tensors."""
+
     def __call__(self, sample):
         # Assumes that min-max scaling is done when pre-processing the data
         return torch.from_numpy(sample).float()
 
 
 class TabularDataset(Dataset):
-    def __init__(self, config, datadir, dataset_name, mode='train', transform=ToTensorNormalize()):
+    def __init__(self, config, datadir, dataset_name, mode="train", transform=ToTensorNormalize()):
         """Dataset class for tabular data format.
 
         Args:
@@ -83,7 +101,7 @@ class TabularDataset(Dataset):
             dataset_name (str): Name of the dataset to load
             mode (bool): Defines whether the data is for Train, Validation, or Test mode
             transform (func): Transformation function for data
-            
+
         """
 
         self.config = config
@@ -109,49 +127,86 @@ class TabularDataset(Dataset):
 
         if self.dataset_name.lower() in ["mnist"]:
             x_train, y_train, x_test, y_test = self._load_mnist()
+        elif self.dataset_name.lower() in [
+            "adult",
+            "aloi",
+            "helena",
+            "higgs",
+            "jannis",
+        ]:
+            args = {"data_path": "./data"}
+            args = Namespace(**args)
+            dataset = DATASET_NAME_TO_DATASET_MAP[self.dataset_name.lower()](args)
+            dataset.load()
+            X, y = dataset.X, dataset.y
+
+            x_train, x_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+
+            scaler = MinMaxScaler()
+            x_train = scaler.fit_transform(x_train)
+            x_test = scaler.transform(x_test)
+
         else:
-            print(f"Given dataset name is not found. Check for typos, or missing condition "
-                  f"in _load_data() of TabularDataset class in utils/load_data.py .")
+            print(
+                f"Given dataset name is not found. Check for typos, or missing condition "
+                f"in _load_data() of TabularDataset class in utils/load_data.py ."
+            )
             exit()
 
         # Define the ratio of training-validation split, e.g. 0.8
         training_data_ratio = self.config["training_data_ratio"]
-        
+
         # If validation is on, and trainin_data_ratio==1, stop and warn
         if self.config["validate"] and training_data_ratio >= 1.0:
-            print(f"training_data_ratio must be < 1.0 if you want to run validation during training.")
-            exit()            
+            print(
+                f"training_data_ratio must be < 1.0 if you want to run validation during training."
+            )
+            exit()
 
         # Shuffle indexes of samples to randomize training-validation split
         idx = np.random.permutation(x_train.shape[0])
 
-        # Divide training and validation data : 
+        # Divide training and validation data :
         # validation data = training_data_ratio:(1-training_data_ratio)
-        tr_idx = idx[:int(len(idx) * training_data_ratio)]
-        val_idx = idx[int(len(idx) * training_data_ratio):]
+        tr_idx = idx[: int(len(idx) * training_data_ratio)]
+        val_idx = idx[int(len(idx) * training_data_ratio) :]
 
         # Validation data
         x_val = x_train[val_idx, :]
         y_val = y_train[val_idx]
-        
+
         # Training data
         x_train = x_train[tr_idx, :]
         y_train = y_train[tr_idx]
 
         # Update number of classes in the config file in case that it is not correct.
-        n_classes = len(list(set(y_train.reshape(-1, ).tolist())))
+        n_classes = len(
+            list(
+                set(
+                    y_train.reshape(
+                        -1,
+                    ).tolist()
+                )
+            )
+        )
         if self.config["n_classes"] != n_classes:
             self.config["n_classes"] = n_classes
-            print(f"{50 * '>'} Number of classes changed "
-                  f"from {self.config['n_classes']} to {n_classes} {50 * '<'}")
+            print(
+                f"{50 * '>'} Number of classes changed "
+                f"from {self.config['n_classes']} to {n_classes} {50 * '<'}"
+            )
 
         # Check if the values of features are small enough to work well for neural network
         if np.max(np.abs(x_train)) > 10:
-            print(f"Pre-processing of data does not seem to be correct. "
-                  f"Max value found in features is {np.max(np.abs(x_train))}\n"
-                  f"Please check the values of features...")
+            print(
+                f"Pre-processing of data does not seem to be correct. "
+                f"Max value found in features is {np.max(np.abs(x_train))}\n"
+                f"Please check the values of features..."
+            )
             exit()
-        
+
         # Select features and labels, based on the mode
         if self.mode == "train":
             data = x_train
@@ -163,28 +218,29 @@ class TabularDataset(Dataset):
             data = x_test
             labels = y_test
         else:
-            print(f"Something is wrong with the data mode. "
-                  f"Use one of three options: train, validation, and test.")
+            print(
+                f"Something is wrong with the data mode. "
+                f"Use one of three options: train, validation, and test."
+            )
             exit()
-        
+
         # Return features, and labels
         return data, labels
 
-
     def _load_mnist(self):
         """Loads MNIST dataset"""
-        
+
         self.data_path = os.path.join("./data/", "mnist")
-        
-        with open(self.data_path + '/train.npy', 'rb') as f:
+
+        with open(self.data_path + "/train.npy", "rb") as f:
             x_train = np.load(f)
             y_train = np.load(f)
 
-        with open(self.data_path + '/test.npy', 'rb') as f:
+        with open(self.data_path + "/test.npy", "rb") as f:
             x_test = np.load(f)
             y_test = np.load(f)
 
-        x_train = x_train.reshape(-1, 28 * 28) / 255.
-        x_test = x_test.reshape(-1, 28 * 28) / 255.
+        x_train = x_train.reshape(-1, 28 * 28) / 255.0
+        x_test = x_test.reshape(-1, 28 * 28) / 255.0
 
         return x_train, y_train, x_test, y_test

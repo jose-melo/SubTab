@@ -18,6 +18,7 @@ from utils.loss_functions import JointLoss
 from utils.model_plot import save_loss_plot
 from utils.model_utils import AEWrapper
 from utils.utils import set_seed, set_dirs
+import wandb
 
 th.autograd.set_detect_anomaly(True)
 
@@ -46,7 +47,7 @@ class SubTab:
         self._set_paths()
         # Set directories i.e. create ones that are missing.
         set_dirs(self.options)
-        # Set the condition if we need to build combinations of 2 out of projections. 
+        # Set the condition if we need to build combinations of 2 out of projections.
         self.is_combination = self.options["contrastive_loss"] or self.options["distance_loss"]
         # ------Network---------
         # Instantiate networks
@@ -65,7 +66,8 @@ class SubTab:
         # Add the model and its name to a list to save, and load in the future
         self.model_dict.update({"encoder": self.encoder})
         # Assign autoencoder to a device
-        for _, model in self.model_dict.items(): model.to(self.device)
+        for _, model in self.model_dict.items():
+            model.to(self.device)
         # Get model parameters
         parameters = [model.parameters() for _, model in self.model_dict.items()]
         # Joint loss including contrastive, reconstruction and distance losses
@@ -83,8 +85,14 @@ class SubTab:
         validation_loader = data_loader.validation_loader
 
         # Placeholders to record losses per batch
-        self.loss = {"tloss_b": [], "tloss_e": [], "vloss_e": [],
-                     "closs_b": [], "rloss_b": [], "zloss_b": []}
+        self.loss = {
+            "tloss_b": [],
+            "tloss_e": [],
+            "vloss_e": [],
+            "closs_b": [],
+            "rloss_b": [],
+            "zloss_b": [],
+        }
 
         # Turn on training mode for the model.
         self.set_mode(mode="training")
@@ -100,7 +108,7 @@ class SubTab:
             # Go through batches
             for i, (x, _) in self.train_tqdm:
 
-                #  Concatenate original data with itself to be used when computing reconstruction error 
+                #  Concatenate original data with itself to be used when computing reconstruction error
                 #  w.r.t reconstructions from subsets xi and xj
                 Xorig = self.process_batch(x, x)
 
@@ -124,7 +132,9 @@ class SubTab:
                 # Compute validation loss
                 _ = self.validate(validation_loader)
                 # Get reconstruction loss for training per epoch
-            self.loss["tloss_e"].append(sum(self.loss["tloss_b"][-self.total_batches:-1]) / self.total_batches)
+            self.loss["tloss_e"].append(
+                sum(self.loss["tloss_b"][-self.total_batches : -1]) / self.total_batches
+            )
 
             # Change learning rate if scheduler==True
             _ = self.scheduler.step() if self.options["scheduler"] else None
@@ -165,22 +175,22 @@ class SubTab:
                 if self.is_combination:
                     # Get combinations of subsets [(x1, x2), (x1, x3)...]
                     x_tilde_list = self.get_combinations_of_subsets(x_tilde_list)
-                    
+
                 #  Concatenate original data with itself to be used when computing reconstruction error
                 #  w.r.t reconstructions from xi and xj
                 Xorig = self.process_batch(x, x)
 
                 # List to hold validation loss
                 val_loss = []
-                
+
                 # Pass data through model
                 for xi in x_tilde_list:
-                    
-                    # If we are using combination of subsets, use xi since it is already a concatenation of two subsets. 
-                    # Else, concatenate subset with itself just to make the computation of loss compatible with the case, 
+
+                    # If we are using combination of subsets, use xi since it is already a concatenation of two subsets.
+                    # Else, concatenate subset with itself just to make the computation of loss compatible with the case,
                     # in which we use the combinations. Note that Xorig is already concatenation of two copies of original input.
                     Xinput = xi if self.is_combination else self.process_batch(xi, xi)
-            
+
                     # Forwards pass
                     z, latent, Xrecon = self.encoder(Xinput)
                     # Compute losses
@@ -205,7 +215,7 @@ class SubTab:
             self.loss["vloss_e"].append(vloss)
         # Return mean validation loss
         return vloss
-    
+
     def update_autoencoder(self, x_tilde_list, Xorig):
         """Updates autoencoder model using subsets of features
 
@@ -219,14 +229,18 @@ class SubTab:
 
         # pass data through model
         for xi in x_tilde_list:
-            # If we are using combination of subsets use xi since it is already a concatenation of two subsets. 
-            # Else, concatenate subset with itself just to make the computation of loss compatible with the case, 
+            # If we are using combination of subsets use xi since it is already a concatenation of two subsets.
+            # Else, concatenate subset with itself just to make the computation of loss compatible with the case,
             # in which we use the combinations. Note that Xorig is already concatenation of two copies of original input.
             Xinput = xi if self.is_combination else self.process_batch(xi, xi)
             # Forwards pass
             z, latent, Xrecon = self.encoder(Xinput)
             # If recontruct_subset is True, the output of decoder should be compared against subset (input to encoder)
-            Xorig = Xinput if self.options["reconstruction"] and self.options["reconstruct_subset"] else Xorig
+            Xorig = (
+                Xinput
+                if self.options["reconstruction"] and self.options["reconstruct_subset"]
+                else Xorig
+            )
             # Compute losses
             tloss, closs, rloss, zloss = self.joint_loss(z, Xrecon, Xorig)
             # Accumulate losses
@@ -259,28 +273,27 @@ class SubTab:
 
         Args:
             x_tilde_list (list): List of subsets e.g. [x1, x2, x3, ...]
-        
+
         Returns:
             (list): A list of combinations of subsets e.g. [(x1, x2), (x1, x3), ...]
 
-        """        
-                            
+        """
+
         # Compute combinations of subsets [(x1, x2), (x1, x3)...]
         subset_combinations = list(itertools.combinations(x_tilde_list, 2))
         # List to store the concatenated subsets
         concatenated_subsets_list = []
-        
+
         # Go through combinations
-        for (xi, xj) in subset_combinations:
+        for xi, xj in subset_combinations:
             # Concatenate xi, and xj, and turn it into a tensor
             Xbatch = self.process_batch(xi, xj)
             # Add it to the list
             concatenated_subsets_list.append(Xbatch)
-        
+
         # Return the list of combination of subsets
         return concatenated_subsets_list
-        
-        
+
     def mask_generator(self, p_m, x):
         """Generate mask vector."""
         mask = np.random.binomial(1, p_m, x.shape)
@@ -293,13 +306,13 @@ class SubTab:
             x (np.ndarray): Input data, which is divded to the subsets
             mode (bool): Indicates whether we are training a model, or testing it
             skip (list): List of integers, showing which subsets to skip when training the model
-        
+
         Returns:
             (list): A list of np.ndarrays, each of which is one subset
             (list): A list of lists, each list of which indicates locations of added noise in a subset
 
         """
-        
+
         n_subsets = self.options["n_subsets"]
         n_column = self.options["dims"][0]
         overlap = self.options["overlap"]
@@ -349,20 +362,20 @@ class SubTab:
                 # Replace selected x_bar features with the noisy ones
                 x_bar = x_bar * (1 - mask) + x_bar_noisy * mask
 
-            # Add the subset to the list   
+            # Add the subset to the list
             x_tilde_list.append(x_bar)
 
         return x_tilde_list
 
     def generate_noisy_xbar(self, x):
         """Generates noisy version of the samples x
-        
+
         Args:
             x (np.ndarray): Input data to add noise to
-        
+
         Returns:
             (np.ndarray): Corrupted version of input x
-            
+
         """
         # Dimensions
         no, dim = x.shape
@@ -389,7 +402,8 @@ class SubTab:
 
     def clean_up_memory(self, losses):
         """Deletes losses with attached graph, and cleans up memory"""
-        for loss in losses: del loss
+        for loss in losses:
+            del loss
         gc.collect()
 
     def process_batch(self, xi, xj):
@@ -414,13 +428,20 @@ class SubTab:
         # For sub-sequent epochs, display only epoch losses.
         else:
             description = f"Epoch-{epoch} Total training loss:{self.loss['tloss_e'][-1]:.4f}"
-            description += f", val loss:{self.loss['vloss_e'][-1]:.4f}" if self.options["validate"] else ""
+            description += (
+                f", val loss:{self.loss['vloss_e'][-1]:.4f}" if self.options["validate"] else ""
+            )
             description += f" | Losses per batch - X recon:{self.loss['rloss_b'][-1]:.4f}"
             if self.options["contrastive_loss"]:
                 description += f", contrastive:{self.loss['closs_b'][-1]:.4f}"
             if self.options["distance_loss"]:
                 description += f", z distance:{self.loss['zloss_b'][-1]:.6f}, Progress"
 
+        wandb_log = {
+            key: np.mean(value) if isinstance(value, list) else value
+            for key, value in self.loss.items()
+        }
+        wandb.log(wandb_log)
         # Update the displayed message
         self.train_tqdm.set_description(description)
 
@@ -446,8 +467,12 @@ class SubTab:
     def print_model_summary(self):
         """Displays model architectures as a sanity check to see if the models are constructed correctly."""
         # Summary of the model
-        description = f"{40 * '-'}Summary of the models (an Autoencoder and Projection network):{40 * '-'}\n"
-        description += f"{34 * '='}{self.options['model_mode'].upper().replace('_', ' ')} Model{34 * '='}\n"
+        description = (
+            f"{40 * '-'}Summary of the models (an Autoencoder and Projection network):{40 * '-'}\n"
+        )
+        description += (
+            f"{34 * '='}{self.options['model_mode'].upper().replace('_', ' ')} Model{34 * '='}\n"
+        )
         description += f"{self.encoder}\n"
         # Print model architecture
         print(description)
@@ -474,15 +499,23 @@ class SubTab:
         self.scheduler = th.optim.lr_scheduler.StepLR(self.optimizer_ae, step_size=1, gamma=0.99)
 
     def _set_paths(self):
-        """ Sets paths to bse used for saving results at the end of the training"""
+        """Sets paths to bse used for saving results at the end of the training"""
         # Top results directory
-        self._results_path = os.path.join(self.options["paths"]["results"], self.options["framework"])
+        self._results_path = os.path.join(
+            self.options["paths"]["results"], self.options["framework"]
+        )
         # Directory to save model
-        self._model_path = os.path.join(self._results_path, "training", self.options["model_mode"], "model")
+        self._model_path = os.path.join(
+            self._results_path, "training", self.options["model_mode"], "model"
+        )
         # Directory to save plots as png files
-        self._plots_path = os.path.join(self._results_path, "training", self.options["model_mode"], "plots")
+        self._plots_path = os.path.join(
+            self._results_path, "training", self.options["model_mode"], "plots"
+        )
         # Directory to save losses as csv file
-        self._loss_path = os.path.join(self._results_path, "training", self.options["model_mode"], "loss")
+        self._loss_path = os.path.join(
+            self._results_path, "training", self.options["model_mode"], "loss"
+        )
 
     def _adam(self, params, lr=1e-4):
         """Sets up AdamW optimizer using model params"""
