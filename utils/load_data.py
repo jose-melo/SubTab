@@ -9,7 +9,6 @@ from argparse import Namespace
 import os
 
 from src.datasets.dict_to_data import DATASET_NAME_TO_DATASET_MAP
-import datatable as dt
 import numpy as np
 import pandas as pd
 import torch

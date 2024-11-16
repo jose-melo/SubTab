@@ -5,7 +5,6 @@ email: ucabtuc@gmail.com
 Description: Wrapper function for evaluation routine.
 """
 
-import mlflow
 import torch as th
 import torch.utils.data
 from tqdm import tqdm
@@ -13,7 +12,13 @@ from tqdm import tqdm
 from src.model import SubTab
 from utils.arguments import get_arguments, get_config
 from utils.arguments import print_config_summary
-from utils.eval_utils import linear_model_eval, plot_clusters, append_tensors_to_lists, concatenate_lists, aggregate
+from utils.eval_utils import (
+    linear_model_eval,
+    plot_clusters,
+    append_tensors_to_lists,
+    concatenate_lists,
+    aggregate,
+)
 from utils.load_data import Loader
 from utils.utils import set_dirs, run_with_profiler, update_config_with_model_dims
 
@@ -35,11 +40,21 @@ def eval(data_loader, config):
     # Evaluate Autoencoder
     with th.no_grad():
         # Get the joint embeddings and class labels of training set
-        z_train, y_train = evalulate_models(data_loader, model, config, plot_suffix="training", mode="train")
-        
+        z_train, y_train = evalulate_models(
+            data_loader, model, config, plot_suffix="training", mode="train"
+        )
+
         # Train and evaluate logistig regression using the joint embeddings of training and test set
-        evalulate_models(data_loader, model, config, plot_suffix="test", mode="test", z_train=z_train, y_train=y_train)
-        
+        evalulate_models(
+            data_loader,
+            model,
+            config,
+            plot_suffix="test",
+            mode="test",
+            z_train=z_train,
+            y_train=y_train,
+        )
+
         # End of the run
         print(f"Evaluation results are saved under ./results/{config['framework']}/evaluation/\n")
         print(f"{100 * '='}\n")
@@ -50,7 +65,9 @@ def eval(data_loader, config):
             mlflow.log_artifacts(model._results_path + "/evaluation/" + "/clusters", "evaluation")
 
 
-def evalulate_models(data_loader, model, config, plot_suffix="_Test", mode='train', z_train=None, y_train=None):
+def evalulate_models(
+    data_loader, model, config, plot_suffix="_Test", mode="train", z_train=None, y_train=None
+):
     """Evaluates representations using linear model, and visualisation of clusters using t-SNE and PCA on embeddings.
 
     Args:
@@ -70,14 +87,19 @@ def evalulate_models(data_loader, model, config, plot_suffix="_Test", mode='trai
     """
     # A small function to print a line break on the command line.
     break_line = lambda sym: f"{100 * sym}\n{100 * sym}\n"
-    
+
     # Print whether we are evaluating training set, or test set
-    decription = break_line('#') + f"Getting the joint embeddings of {plot_suffix} set...\n" + \
-                 break_line('=') + f"Dataset used: {config['dataset']}\n" + break_line('=')
-    
-    # Print the message         
+    decription = (
+        break_line("#")
+        + f"Getting the joint embeddings of {plot_suffix} set...\n"
+        + break_line("=")
+        + f"Dataset used: {config['dataset']}\n"
+        + break_line("=")
+    )
+
+    # Print the message
     print(decription)
-    
+
     # Get the model
     encoder = model.encoder
     # Move the model to the device
@@ -85,8 +107,8 @@ def evalulate_models(data_loader, model, config, plot_suffix="_Test", mode='trai
     # Set the model to evaluation mode
     encoder.eval()
 
-    # Choose either training, or test data loader    
-    data_loader_tr_or_te = data_loader.train_loader if mode == 'train' else data_loader.test_loader
+    # Choose either training, or test data loader
+    data_loader_tr_or_te = data_loader.train_loader if mode == "train" else data_loader.test_loader
 
     # Attach progress bar to data_loader to check it during training. "leave=True" gives a new line per epoch
     train_tqdm = tqdm(enumerate(data_loader_tr_or_te), total=len(data_loader_tr_or_te), leave=True)
@@ -111,13 +133,11 @@ def evalulate_models(data_loader, model, config, plot_suffix="_Test", mode='trai
             # Collect latent
             latent_list.append(latent)
 
-            
         # Aggregation of latent representations
         latent = aggregate(latent_list, config)
-            
+
         # Append tensors to the corresponding lists as numpy arrays
-        z_l, clabels_l = append_tensors_to_lists([z_l, clabels_l],
-                                                 [latent, label.int()])
+        z_l, clabels_l = append_tensors_to_lists([z_l, clabels_l], [latent, label.int()])
 
     # Turn list of numpy arrays to a single numpy array for representations.
     z = concatenate_lists([z_l])
@@ -127,14 +147,20 @@ def evalulate_models(data_loader, model, config, plot_suffix="_Test", mode='trai
     # Visualise clusters
     plot_clusters(config, z, clabels, plot_suffix="_inLatentSpace_" + plot_suffix)
 
-    if mode == 'test':
-        # Title of the section to print 
-        print(20 * "*" + " Running evaluation using Logistic Regression trained on the joint embeddings" \
-                       + " of training set and tested on that of test set" + 20 * "*")
+    if mode == "test":
+        # Title of the section to print
+        print(
+            20 * "*"
+            + " Running evaluation using Logistic Regression trained on the joint embeddings"
+            + " of training set and tested on that of test set"
+            + 20 * "*"
+        )
         # Description of the task (Classification scores using Logistic Regression) to print on the command line
         description = "Sweeping C parameter. Smaller C values specify stronger regularization:"
         # Evaluate the embeddings
-        linear_model_eval(config, z_train, y_train, z_test=z, y_test=clabels, description=description)
+        linear_model_eval(
+            config, z_train, y_train, z_test=z, y_test=clabels, description=description
+        )
 
     else:
         # Return z_train = z, and y_train = clabels

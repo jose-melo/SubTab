@@ -16,7 +16,7 @@ import torch
 import yaml
 from numpy.random import seed
 from sklearn import manifold
-from texttable import Texttable
+from tabulate import tabulate
 
 
 def set_seed(options):
@@ -141,13 +141,13 @@ def run_with_profiler(main_fn, config):
     # Run the main
     main_fn(config)
     profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats('ncalls')
+    stats = pstats.Stats(profiler).sort_stats("ncalls")
     stats.print_stats()
 
 
 def tsne(latent):
     """Reduces dimensionality of embeddings to 2, and returns it"""
-    mds = manifold.TSNE(n_components=2, init='pca', random_state=0)
+    mds = manifold.TSNE(n_components=2, init="pca", random_state=0)
     return mds.fit_transform(latent)
 
 
@@ -159,8 +159,11 @@ def print_config(args):
     # Sort keys
     keys = sorted(args.keys())
     # Initialize table
-    table = Texttable()
-    # Add rows to the table under two columns ("Parameter", "Value").
-    table.add_rows([["Parameter", "Value"]] + [[k.replace("_", " ").capitalize(), args[k]] for k in keys])
-    # Print the table.
-    print(table.draw())
+    print(
+        tabulate([[k.replace("_", " ").capitalize(), args[k]] for k in keys], tablefmt="fancy_grid")
+    )
+    # table = Texttable()
+    ## Add rows to the table under two columns ("Parameter", "Value").
+    # table.add_rows([["Parameter", "Value"]] + [[k.replace("_", " ").capitalize(), args[k]] for k in keys])
+    ## Print the table.
+    # print(table.draw())
