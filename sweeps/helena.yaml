@@ -2,7 +2,7 @@ program: train.py
 method: bayes
 metric:
   goal: minimize
-  name: vloss_e
+  name: tloss_e
 parameters:
   dataset:
     value: "helena"

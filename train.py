@@ -130,4 +130,4 @@ if __name__ == "__main__":
         # Get all of available training set for evaluation (i.e. no need for validation set)
         config["training_data_ratio"] = 1.0
         # Run Evaluation
-        eval.main(config)
+        # eval.main(config)
