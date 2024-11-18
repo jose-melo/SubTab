@@ -16,7 +16,7 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 # Run the script 20 times
-for i in {1..2}; do
+for i in {1..20}; do
     echo "Running $SCRIPT (iteration $i)..."
     bash "$SCRIPT"
 done
