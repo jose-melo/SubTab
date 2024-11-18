@@ -7,6 +7,7 @@ Description: Wrapper function for training routine.
 
 import copy
 from datetime import datetime
+import random
 import time
 
 import yaml
@@ -84,8 +85,6 @@ if __name__ == "__main__":
     # Get configuration file
     config = get_config(args)
 
-    parser = argparse.ArgumentParser(description="Train a model")
-
     if args.n_dims == 2:
         dims = [args.hidden_dim_0, args.hidden_dim_1]
     elif args.n_dims == 3:
@@ -97,6 +96,18 @@ if __name__ == "__main__":
     config["n_subsets"] = args.n_subsets
     config["aggregation"] = args.aggregation
     config["noise_type"] = args.noise_type
+    config["model_path"] = args.model_path
+
+    if args.random:
+        seed = random.randint(0, 2**32 - 1)
+        config["seed"] = seed
+
+    print(f"Using random seed: {seed}")
+
+    if args.dataset == "california":
+        config["task"] = "regression"
+    else:
+        config["task"] = "classification"
 
     # Overwrite the parent folder name for saving results
     config["framework"] = config["dataset"]
@@ -130,4 +141,4 @@ if __name__ == "__main__":
         # Get all of available training set for evaluation (i.e. no need for validation set)
         config["training_data_ratio"] = 1.0
         # Run Evaluation
-        # eval.main(config)
+        eval.main(config)

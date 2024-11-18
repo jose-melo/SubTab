@@ -6,6 +6,7 @@ Description: Utility functions for evaluations.
 """
 
 import csv
+from datetime import datetime
 import functools
 import os
 
@@ -14,13 +15,18 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.metrics import mean_squared_error
+import torch as th
 
 from utils.utils import tsne
 from utils.colors import get_color_list
 
 
-def linear_model_eval(config, z_train, y_train, z_test=None, y_test=None, description="Logistic Reg."):
+def linear_model_eval(
+    config, z_train, y_train, z_test=None, y_test=None, description="Logistic Reg."
+):
     """Evaluates representations using Logistic Regression model.
     Args:
         config (dict): Dictionary that defines options to use
@@ -32,41 +38,70 @@ def linear_model_eval(config, z_train, y_train, z_test=None, y_test=None, descri
 
     """
     results_list = []
-    
+
     # Print out a useful description
     print(10 * ">" + description)
-    
-    # Sweep regularization parameter to see what works best for logistic regression
-    for c in [0.01, 0.1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6]:
-        # Initialize Logistic regression
-        print(10 * "*" + "C=" + str(c) + 10 * "*")
-        clf = LogisticRegression(max_iter=1200, solver='lbfgs', C=c, multi_class='multinomial')
-        # Fit model to the data
-        clf.fit(z_train, y_train)
-        # Score for training set
-        tr_acc = clf.score(z_train, y_train)
-        # Score for test set
-        te_acc = clf.score(z_test, y_test)
-        # Print results
-        print("Training score:", tr_acc)
-        print("Test score:", te_acc)
-        # Record results
-        results_list.append({"model": "LogReg_" + str(c),
-                             "train_acc": tr_acc,
-                             "test_acc": te_acc})
+    if config["task"] == "regression":
+        print(10 * "=", "Regression task", 10 * "=")
+        regressor = LinearRegression()
+        scaler_y = StandardScaler()
+
+        y_train_normalized = scaler_y.fit_transform(y_train.reshape(-1, 1)).ravel()
+        y_test_normalized = scaler_y.transform(y_test.reshape(-1, 1)).ravel()
+
+        regressor.fit(z_train, y_train_normalized)
+        tr_pred = regressor.predict(z_train)
+        te_pred = regressor.predict(z_test)
+        tr_rmse = np.sqrt(mean_squared_error(y_train_normalized, tr_pred))
+        te_rmse = np.sqrt(mean_squared_error(y_test_normalized, te_pred))
+        print("Training RMSE:", tr_rmse)
+        print("Test RMSE:", te_rmse)
+
+        results_list.append({"model": "LinReg", "train_rmse": tr_rmse, "test_acc": te_rmse})
+    else:
+        # Sweep regularization parameter to see what works best for logistic regression
+        for c in [0.01, 0.1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6]:
+            # Initialize Logistic regression
+            print(10 * "*" + "C=" + str(c) + 10 * "*")
+            clf = LogisticRegression(max_iter=1200, solver="lbfgs", C=c, multi_class="multinomial")
+            # Fit model to the data
+            clf.fit(z_train, y_train)
+            # Score for training set
+            tr_acc = clf.score(z_train, y_train)
+            # Score for test set
+            te_acc = clf.score(z_test, y_test)
+            # Print results
+            print("Training score:", tr_acc)
+            print("Test score:", te_acc)
+            # Record results
+            results_list.append(
+                {"model": "LogReg_" + str(c), "train_acc": tr_acc, "test_acc": te_acc}
+            )
 
     # File name to use for CSV file
-    file_name = "_nsub_" + str(config["n_subsets"]) + \
-                "_overlap_" + str(config["overlap"]) + \
-                "_bs_" + str(config["batch_size"]) + \
-                "_zdim_" + str(config["dims"][-1]) + \
-                "_epoch_" + str(config["epochs"]) + \
-                "_seed_" + str(config["seed"])
+    file_name = (
+        "_nsub_"
+        + str(config["n_subsets"])
+        + "_overlap_"
+        + str(config["overlap"])
+        + "_bs_"
+        + str(config["batch_size"])
+        + "_zdim_"
+        + str(config["dims"][-1])
+        + "_epoch_"
+        + str(config["epochs"])
+        + "_seed_"
+        + str(config["seed"])
+    )
 
     # Save results as a csv file
     keys = results_list[0].keys()
-    file_path = './results/' + file_name + '.csv'
-    with open(file_path, 'w', newline='')  as output_file:
+    file_path = f"./results/{config["dataset"]}"
+
+    # Create the folder if it does not exist
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    with open(file_path + f"/{file_name} .csv", "a", newline="") as output_file:
         dict_writer = csv.DictWriter(output_file, keys)
         dict_writer.writeheader()
         dict_writer.writerows(results_list)
@@ -89,12 +124,26 @@ def plot_clusters(config, z, clabels, plot_suffix="_inLatentSpace"):
     # clegends = ["A", "B", "C", "D", ...]..choose first ncol characters, one per cluster
     clegends = list("0123456789")[0:ncol]
     # Show clusters only
-    visualise_clusters(config, z, clabels, plt_name="classes" + plot_suffix, legend_title="Classes",
-                       legend_labels=clegends)
+    visualise_clusters(
+        config,
+        z,
+        clabels,
+        plt_name="classes" + plot_suffix,
+        legend_title="Classes",
+        legend_labels=clegends,
+    )
 
 
-def visualise_clusters(config, embeddings, labels, plt_name="test", alpha=1.0, legend_title=None, legend_labels=None,
-                       ncol=1):
+def visualise_clusters(
+    config,
+    embeddings,
+    labels,
+    plt_name="test",
+    alpha=1.0,
+    legend_title=None,
+    legend_labels=None,
+    ncol=1,
+):
     """Function to plot clusters using embeddings from t-SNE and PCA
 
     Args:
@@ -118,17 +167,27 @@ def visualise_clusters(config, embeddings, labels, plt_name="test", alpha=1.0, l
     for i in range(len(color_list)):
         palette[str(i)] = color_list[i]
     # Make sure that the labels are 1D arrays
-    y = labels.reshape(-1, )
+    y = labels.reshape(
+        -1,
+    )
     # Turn labels to a list
     y = list(map(str, y.tolist()))
     # Define number of sub-plots to draw. In this case, 2, one for PCA, and one for t-SNE
     img_n = 2
     # Initialize subplots
-    fig, axs = plt.subplots(1, img_n, figsize=(9, 3.5), facecolor='w', edgecolor='k')
+    fig, axs = plt.subplots(1, img_n, figsize=(9, 3.5), facecolor="w", edgecolor="k")
     # Adjust the whitespace around sub-plots
-    fig.subplots_adjust(hspace=.1, wspace=.1)
+    fig.subplots_adjust(hspace=0.1, wspace=0.1)
     # adjust the ticks of axis.
-    plt.tick_params(axis='both', which='both', left=False, right=False, bottom=False, top=False, labelbottom=False)
+    plt.tick_params(
+        axis="both",
+        which="both",
+        left=False,
+        right=False,
+        bottom=False,
+        top=False,
+        labelbottom=False,
+    )
     # Flatten axes if we have more than 1 plot. Or, return a list of 2 axs to make it compatible with multi-plot case.
     axs = axs.ravel() if img_n > 1 else [axs, axs]
     # Get 2D embeddings, using PCA
@@ -136,19 +195,33 @@ def visualise_clusters(config, embeddings, labels, plt_name="test", alpha=1.0, l
     # Fit training data and transform
     embeddings_pca = pca.fit_transform(embeddings)  # if embeddings.shape[1]>2 else embeddings
     # Set the title of the sub-plot
-    axs[0].title.set_text('Embeddings from PCA')
+    axs[0].title.set_text("Embeddings from PCA")
     # Plot samples, using each class label to define the color of the class.
-    sns_plt = sns.scatterplot(x=embeddings_pca[:, 0], y=embeddings_pca[:, 1], ax=axs[0], palette=palette, hue=y, s=20,
-                              alpha=alpha)
+    sns_plt = sns.scatterplot(
+        x=embeddings_pca[:, 0],
+        y=embeddings_pca[:, 1],
+        ax=axs[0],
+        palette=palette,
+        hue=y,
+        s=20,
+        alpha=alpha,
+    )
     # Overwrite legend labels
     overwrite_legends(sns_plt, fig, ncol=ncol, labels=legend_labels, title=legend_title)
     # Get 2D embeddings, using t-SNE
     embeddings_tsne = tsne(embeddings)  # if embeddings.shape[1]>2 else embeddings
     # Set the title of the sub-plot
-    axs[1].title.set_text('Embeddings from t-SNE')
+    axs[1].title.set_text("Embeddings from t-SNE")
     # Plot samples, using each class label to define the color of the class.
-    sns_plt = sns.scatterplot(x=embeddings_tsne[:, 0], y=embeddings_tsne[:, 1], ax=axs[1], palette=palette, hue=y, s=20,
-                              alpha=alpha)
+    sns_plt = sns.scatterplot(
+        x=embeddings_tsne[:, 0],
+        y=embeddings_tsne[:, 1],
+        ax=axs[1],
+        palette=palette,
+        hue=y,
+        s=20,
+        alpha=alpha,
+    )
     # Overwrite legend labels
     overwrite_legends(sns_plt, fig, ncol=ncol, labels=legend_labels, title=legend_title)
     # Remove legends in sub-plots
@@ -160,9 +233,11 @@ def visualise_clusters(config, embeddings, labels, plt_name="test", alpha=1.0, l
     # Get the path to the project root
     root_path = os.path.dirname(os.path.dirname(__file__))
     # Define the path to save the plot to.
-    fig_path = os.path.join(root_path, "results", config["framework"], "evaluation", "clusters", plt_name + ".png")
+    fig_path = os.path.join(
+        root_path, "results", config["framework"], "evaluation", "clusters", plt_name + ".png"
+    )
     # Define tick params
-    plt.tick_params(axis=u'both', which=u'both', length=0)
+    plt.tick_params(axis="both", which="both", length=0)
     # Save the plot
     plt.savefig(fig_path, bbox_inches="tight")
     # Clear figure just in case if there is a follow-up plot.
@@ -273,20 +348,20 @@ def aggregate(latent_list, config):
     """
     # Initialize the joint representation
     latent = None
-    
+
     # Aggregation of latent representations
-    if config["aggregation"]=="mean":
-        latent = sum(latent_list)/len(latent_list)
-    elif config["aggregation"]=="sum":
+    if config["aggregation"] == "mean":
+        latent = sum(latent_list) / len(latent_list)
+    elif config["aggregation"] == "sum":
         latent = sum(latent_list)
-    elif config["aggregation"]=="concat":
+    elif config["aggregation"] == "concat":
         latent = th.cat(latent_list, dim=-1)
-    elif config["aggregation"]=="max":
+    elif config["aggregation"] == "max":
         latent = functools.reduce(th.max, latent_list)
-    elif config["aggregation"]=="min":
+    elif config["aggregation"] == "min":
         latent = functools.reduce(th.min, latent_list)
     else:
         print("Proper aggregation option is not provided. Please check the config file.")
         exit()
-        
+
     return latent

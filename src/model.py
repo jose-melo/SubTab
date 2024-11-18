@@ -471,8 +471,15 @@ class SubTab:
         import glob
 
         for model_name in self.model_dict:
-            filepath = glob.glob(self._model_path + "/" + model_name + "*.pt")
-            filepath = filepath[-1]
+            if "model_path" in self.options and self.options["model_path"] is not None:
+                filepath = self.options["model_path"]
+            else:
+                filepath = glob.glob(self._model_path + "/" + model_name + "*.pt")
+                if len(filepath) == 0:
+                    print(f"No model is found in {self.options['model_path']}")
+                    return
+                filepath = sorted(filepath, key=os.path.getmtime, reverse=True)[0]
+            print(f"Loading model from {filepath}")
             model = th.load(filepath, map_location=self.device)
             setattr(self, model_name, model.eval())
             print(f"--{model_name} is loaded")

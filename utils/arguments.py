@@ -96,6 +96,8 @@ def get_arguments():
     parser.add_argument("--noise_type", type=str, default="swap_noise", help="Noise type")
     parser.add_argument("--masking_ratio", type=float, default=0.2, help="Masking ratio")
     parser.add_argument("--n_subsets", type=int, default=4, help="Number of subsets")
+    parser.add_argument("--random", type=bool, default=False, help="Random seed")
+    parser.add_argument("--model_path", type=str, default=None, help="Model path")
 
     # Return parser arguments
     return parser.parse_args()

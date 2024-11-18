@@ -5,9 +5,12 @@ email: ucabtuc@gmail.com
 Description: Wrapper function for evaluation routine.
 """
 
+from datetime import datetime
+import random
 import torch as th
 import torch.utils.data
 from tqdm import tqdm
+import wandb
 
 from src.model import SubTab
 from utils.arguments import get_arguments, get_config
@@ -145,7 +148,8 @@ def evalulate_models(
     clabels = concatenate_lists([clabels_l])
 
     # Visualise clusters
-    plot_clusters(config, z, clabels, plot_suffix="_inLatentSpace_" + plot_suffix)
+    if len(clabels) != len(z):
+        plot_clusters(config, z, clabels, plot_suffix="_inLatentSpace_" + plot_suffix)
 
     if mode == "test":
         # Title of the section to print
@@ -189,6 +193,30 @@ if __name__ == "__main__":
     args = get_arguments()
     # Get configuration file
     config = get_config(args)
+
+    if args.n_dims == 2:
+        dims = [args.hidden_dim_0, args.hidden_dim_1]
+    elif args.n_dims == 3:
+        dims = [args.hidden_dim_0, args.hidden_dim_1, args.hidden_dim_2]
+
+    config["dims"] = dims
+    config["dropout_rate"] = args.dropout_rate
+    config["learning_rate"] = args.learning_rate
+    config["n_subsets"] = args.n_subsets
+    config["aggregation"] = args.aggregation
+    config["noise_type"] = args.noise_type
+    config["model_path"] = args.model_path
+
+    if args.dataset == "california":
+        config["task"] = "regression"
+    else:
+        config["task"] = "classification"
+
+    if args.random:
+        seed = random.randint(0, 2**32 - 1)
+        config["seed"] = seed
+
+    print(f"Using random seed: {config["seed"]}")
     # Overwrite the parent folder name for saving results
     config["framework"] = config["dataset"]
     # Turn off valiation
@@ -200,6 +228,7 @@ if __name__ == "__main__":
     # Summarize config and arguments on the screen as a sanity check
     print_config_summary(config, args)
     # --If True, start of MLFlow for experiment tracking:
+    wandb.init(project="subtab", name=f"{args.dataset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     if config["mlflow"]:
         # Experiment name
         experiment_name = "Give_Your_Experiment_A_Name"
