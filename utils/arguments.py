@@ -99,6 +99,20 @@ def get_arguments():
     parser.add_argument("--random", type=bool, default=False, help="Random seed")
     parser.add_argument("--model_path", type=str, default=None, help="Model path")
 
+    parser.add_argument(
+        "--hidden_dim", type=int, default=64, help="Number of units in hidden layers."
+    )
+    parser.add_argument("--num_layers", type=int, default=2, help="Number of layers in the MLP.")
+    parser.add_argument(
+        "--learning_rate_mlp", type=float, default=1e-3, help="Learning rate for the optimizer."
+    )
+    parser.add_argument(
+        "--num_epochs_mlp", type=int, default=100, help="Number of epochs for training."
+    )
+    parser.add_argument(
+        "--weight_decay_mlp", type=float, default=1e-4, help="Weight decay for the optimizer."
+    )
+
     # Return parser arguments
     return parser.parse_args()
 

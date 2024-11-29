@@ -11,12 +11,14 @@ import torch as th
 import torch.utils.data
 from tqdm import tqdm
 import wandb
+import numpy as np
 
 from src.model import SubTab
 from utils.arguments import get_arguments, get_config
 from utils.arguments import print_config_summary
 from utils.eval_utils import (
     linear_model_eval,
+    mlp_model_eval,
     plot_clusters,
     append_tensors_to_lists,
     concatenate_lists,
@@ -24,6 +26,7 @@ from utils.eval_utils import (
 )
 from utils.load_data import Loader
 from utils.utils import set_dirs, run_with_profiler, update_config_with_model_dims
+import wandb
 
 torch.manual_seed(1)
 
@@ -41,31 +44,30 @@ def eval(data_loader, config):
     # Load the model
     model.load_models()
     # Evaluate Autoencoder
-    with th.no_grad():
-        # Get the joint embeddings and class labels of training set
-        z_train, y_train = evalulate_models(
-            data_loader, model, config, plot_suffix="training", mode="train"
-        )
+    # Get the joint embeddings and class labels of training set
+    z_train, y_train = evalulate_models(
+        data_loader, model, config, plot_suffix="training", mode="train"
+    )
 
-        # Train and evaluate logistig regression using the joint embeddings of training and test set
-        evalulate_models(
-            data_loader,
-            model,
-            config,
-            plot_suffix="test",
-            mode="test",
-            z_train=z_train,
-            y_train=y_train,
-        )
+    # Train and evaluate logistig regression using the joint embeddings of training and test set
+    evalulate_models(
+        data_loader,
+        model,
+        config,
+        plot_suffix="test",
+        mode="test",
+        z_train=z_train,
+        y_train=y_train,
+    )
 
-        # End of the run
-        print(f"Evaluation results are saved under ./results/{config['framework']}/evaluation/\n")
-        print(f"{100 * '='}\n")
+    # End of the run
+    print(f"Evaluation results are saved under ./results/{config['framework']}/evaluation/\n")
+    print(f"{100 * '='}\n")
 
-        # If mlflow==True, track results
-        if config["mlflow"]:
-            # Log model and results with mlflow
-            mlflow.log_artifacts(model._results_path + "/evaluation/" + "/clusters", "evaluation")
+    # If mlflow==True, track results
+    if config["mlflow"]:
+        # Log model and results with mlflow
+        mlflow.log_artifacts(model._results_path + "/evaluation/" + "/clusters", "evaluation")
 
 
 def evalulate_models(
@@ -162,9 +164,10 @@ def evalulate_models(
         # Description of the task (Classification scores using Logistic Regression) to print on the command line
         description = "Sweeping C parameter. Smaller C values specify stronger regularization:"
         # Evaluate the embeddings
-        linear_model_eval(
-            config, z_train, y_train, z_test=z, y_test=clabels, description=description
-        )
+        mlp_model_eval(config, z_train, y_train, z_test=z, y_test=clabels, description=description)
+        # linear_model_eval(
+        #    config, z_train, y_train, z_test=z, y_test=clabels, description=description
+        # )
 
     else:
         # Return z_train = z, and y_train = clabels
@@ -206,6 +209,14 @@ if __name__ == "__main__":
     config["aggregation"] = args.aggregation
     config["noise_type"] = args.noise_type
     config["model_path"] = args.model_path
+
+    config["hidden_dim"] = args.hidden_dim
+    config["num_layers"] = args.num_layers
+    config["learning_rate_mlp"] = args.learning_rate_mlp
+    config["num_epochs_mlp"] = args.num_epochs_mlp
+    config["weight_decay_mlp"] = args.weight_decay_mlp
+
+    wandb.init(project="subtab", name=f"{args.dataset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
 
     if args.dataset == "california":
         config["task"] = "regression"

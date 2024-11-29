@@ -19,9 +19,142 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import mean_squared_error
 import torch as th
+from tqdm import tqdm
 
 from utils.utils import tsne
 from utils.colors import get_color_list
+import os
+import csv
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, accuracy_score
+import numpy as np
+import wandb
+
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_dim=64, num_layers=2):
+        super(MLP, self).__init__()
+        layers = []
+        for i in range(num_layers):
+            layers.append(nn.Linear(input_dim if i == 0 else hidden_dim, hidden_dim))
+            layers.append(nn.ReLU())
+        layers.append(nn.Linear(hidden_dim, output_dim))
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.network(x)
+
+
+def mlp_model_eval(config, z_train, y_train, z_test=None, y_test=None, description="MLP Eval"):
+    """Evaluates representations using an MLP model."""
+    results_list = []
+
+    # Print out a useful description
+    print(10 * ">" + description)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Prepare data for PyTorch
+    z_train_tensor = torch.tensor(z_train, dtype=torch.float32, requires_grad=True, device=device)
+    y_train_tensor = torch.tensor(
+        y_train,
+        dtype=torch.long,
+        device=device,
+    )
+    z_test_tensor = torch.tensor(z_test, dtype=torch.float32, device=device)
+    y_test_tensor = torch.tensor(
+        y_test,
+        device=device,
+    )
+
+    input_dim = z_train.shape[1]
+    output_dim = 1 if config["task"] == "regression" else len(np.unique(y_train))
+
+    model = MLP(
+        input_dim,
+        output_dim,
+        hidden_dim=config["hidden_dim"],
+        num_layers=config["num_layers"],
+    )
+    model.to(device)
+    criterion = nn.MSELoss() if config["task"] == "regression" else nn.CrossEntropyLoss()
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config["learning_rate_mlp"],
+        weight_decay=config["weight_decay_mlp"],
+    )
+
+    # Training loop
+    for epoch in tqdm(range(config["num_epochs_mlp"])):
+        model.train()
+        optimizer.zero_grad()
+        outputs = model(z_train_tensor)
+        loss = criterion(outputs.squeeze(), y_train_tensor)
+        loss.backward()
+        optimizer.step()
+
+    # Evaluation
+    model.eval()
+    with torch.no_grad():
+        tr_outputs = model(z_train_tensor).squeeze()
+        te_outputs = model(z_test_tensor).squeeze()
+
+        if config["task"] == "regression":
+            scaler_y = StandardScaler()
+            y_train_normalized = scaler_y.fit_transform(y_train.reshape(-1, 1)).ravel()
+            y_test_normalized = scaler_y.transform(y_test.reshape(-1, 1)).ravel()
+
+            tr_rmse = np.sqrt(mean_squared_error(y_train_normalized, tr_outputs.numpy()))
+            te_rmse = np.sqrt(mean_squared_error(y_test_normalized, te_outputs.numpy()))
+            print("Training RMSE:", tr_rmse)
+            print("Test RMSE:", te_rmse)
+            results_list.append({"model": "MLP", "train_rmse": tr_rmse, "test_rmse": te_rmse})
+            wandb.log({"train_rmse": tr_rmse, "test_rmse": te_rmse})
+        else:
+            tr_pred = torch.argmax(tr_outputs, dim=1).cpu().detach().numpy()
+            te_pred = torch.argmax(te_outputs, dim=1).cpu().detach().numpy()
+
+            tr_acc = accuracy_score(y_train, tr_pred)
+            te_acc = accuracy_score(y_test, te_pred)
+            print("Training Accuracy:", tr_acc)
+            print("Test Accuracy:", te_acc)
+
+            wandb.log({"train_acc": tr_acc, "test_acc": te_acc})
+
+            results_list.append({"model": "MLP", "train_acc": tr_acc, "test_acc": te_acc})
+
+    # File name to use for CSV file
+    file_name = (
+        "_nsub_"
+        + str(config["n_subsets"])
+        + "_overlap_"
+        + str(config["overlap"])
+        + "_bs_"
+        + str(config["batch_size"])
+        + "_zdim_"
+        + str(config["dims"][-1])
+        + "_epoch_"
+        + str(config["epochs"])
+        + "_seed_"
+        + str(config["seed"])
+    )
+
+    # Save results as a csv file
+    keys = results_list[0].keys()
+    file_path = f"./results/{config['dataset']}"
+
+    # Create the folder if it does not exist
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    with open(file_path + f"/{file_name}.csv", "a", newline="") as output_file:
+        dict_writer = csv.DictWriter(output_file, keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(results_list)
+        print(f"{100 * '='}\n")
+        print(f"Results are saved at: {file_path}")
 
 
 def linear_model_eval(
@@ -311,7 +444,7 @@ def append_tensors_to_lists(list_of_lists, list_of_tensors):
     # Go through each tensor and corresponding list
     for i in range(len(list_of_tensors)):
         # Convert tensor to numpy and append it to the corresponding list
-        list_of_lists[i] += [list_of_tensors[i].cpu().numpy()]
+        list_of_lists[i] += [list_of_tensors[i].cpu().detach().numpy()]
     # Return the lists
     return list_of_lists
 

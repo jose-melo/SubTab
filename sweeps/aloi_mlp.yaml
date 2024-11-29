@@ -1,0 +1,42 @@
+program: eval.py # Replace with the name of your script
+method: bayes # Choose 'grid', 'random', or 'bayes'
+metric:
+  name: test_acc
+  goal: maximize
+parameters:
+  aggregation:
+    value: "mean"
+  dataset:
+    value: "aloi"
+  dropout_rate:
+    value: 0.15416475786125722
+  hidden_dim_0:
+    value: 1024
+  hidden_dim_1:
+    value: 512
+  hidden_dim_2:
+    value: 256
+  learning_rate:
+    value: 0.0006192894934935058
+  masking_ratio:
+    value: 0.1
+  n_dims:
+    value: 2
+  n_subsets:
+    value: 6
+  noise_type:
+    value: "gaussian_noise"
+  hidden_dim:
+    values: [32, 64, 128, 256, 512, 1024]
+  num_layers:
+    values: [1, 2, 3, 4]
+  learning_rate_mlp:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2
+  num_epochs_mlp:
+    value: 100
+  weight_decay_mlp:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
