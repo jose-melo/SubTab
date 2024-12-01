@@ -1,0 +1,53 @@
+program: run_benchmark.py
+project: tjepa-sweeps
+name: mlp_jannis_subtab_sweep
+method: bayes
+metric:
+  goal: maximize
+  name: jannis_subtab_val_accuracy
+parameters:
+  model_name:
+    value: "mlp"
+  data_set:
+    value: "jannis_subtab"
+  data_path:
+    value: "./embedded_data"
+  data_loader_nprocs:
+    value: 4
+  exp_cadence_type:
+    value: "improvement"
+  exp_train_total_epochs:
+    value: 200
+  batch_size:
+    value: 512
+  exp_weight_decay:
+    min: 0.00001
+    max: 0.001
+  exp_lr:
+    min: 0.0001
+    max: 0.1
+  start_lr:
+    value: 0
+  final_lr:
+    value: 0
+  exp_cache_cadence:
+    value: 20
+  exp_patience:
+    value: 16
+  val_size_ratio:
+    value: 0.1
+  test_size_ratio:
+    value: 0.1
+  n_hidden:
+    values: [2, 4, 8, 16]
+  hidden_dim:
+    values: [8, 16, 32, 64, 128, 256, 512]
+  encoder_type:
+    value: "linear_flatten"
+  dropout:
+    min: 0.0
+    max: 0.7
+  exp_eta_min:
+    value: 0.0
+  using_embedding:
+    value: False

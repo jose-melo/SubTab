@@ -14,6 +14,7 @@ from src.datasets.iris import Iris
 from src.datasets.jannis import Jannis
 from src.datasets.jannis_embedded import JannisEmbedded
 from src.datasets.mnist import MNIST
+from src.datasets.subtab_embedded import SubTabEmbedded
 
 DATASET_NAME_TO_DATASET_MAP = {
     "adult": Adult,
@@ -31,4 +32,10 @@ DATASET_NAME_TO_DATASET_MAP = {
     "iris": Iris,
     "mnist": MNIST,
     "blog": Blog,
+    "helena_subtab": SubTabEmbedded,
+    "adult_subtab": SubTabEmbedded,
+    "aloi_subtab": SubTabEmbedded,
+    "higgs_subtab": SubTabEmbedded,
+    "jannis_subtab": SubTabEmbedded,
+    "california_subtab": SubTabEmbedded,
 }
