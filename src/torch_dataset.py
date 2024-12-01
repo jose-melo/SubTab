@@ -132,7 +132,11 @@ class TorchDataset(Dataset):
                 std_scaler.fit(dataset.y_train.reshape(-1, 1))
                 y_train = std_scaler.transform(dataset.y_train.reshape(-1, 1)).reshape(-1)
                 y_test = std_scaler.transform(dataset.y_test.reshape(-1, 1)).reshape(-1)
-                y_val = dataset.y_test
+                y_val = y_test
+            else:
+                y_train = dataset.y_train
+                y_test = dataset.y_test
+                y_val = y_test
 
         else:
             X = dataset.X
