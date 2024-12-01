@@ -125,10 +125,15 @@ class TorchDataset(Dataset):
         if hasattr(dataset, "x_train") and dataset.x_train is not None:
             X_train = dataset.x_train
             X_test = dataset.x_test
-            y_train = dataset.y_train
-            y_test = dataset.y_test
             X_val = dataset.x_test
-            y_val = dataset.y_test
+
+            if dataset.task_type == TASK_TYPE.REGRESSION:
+                std_scaler = StandardScaler()
+                std_scaler.fit(dataset.y_train.reshape(-1, 1))
+                y_train = std_scaler.transform(dataset.y_train.reshape(-1, 1)).reshape(-1)
+                y_test = std_scaler.transform(dataset.y_test.reshape(-1, 1)).reshape(-1)
+                y_val = dataset.y_test
+
         else:
             X = dataset.X
             Y = dataset.y
