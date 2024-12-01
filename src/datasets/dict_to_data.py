@@ -38,4 +38,5 @@ DATASET_NAME_TO_DATASET_MAP = {
     "higgs_subtab": SubTabEmbedded,
     "jannis_subtab": SubTabEmbedded,
     "california_subtab": SubTabEmbedded,
+    "mnist_subtab": SubTabEmbedded,
 }
